@@ -20,8 +20,8 @@
   <script type="text/babel">
     const { useState, useEffect } = React;
     
-    // Change this to your bot-hosting.net URL or leave as-is for same-origin
-    const API_URL = window.location.origin + '/api';
+    // IMPORTANT: Replace with your actual bot-hosting.net URL
+    const API_URL = 'https://fi8.bot-hosting.net/api';
 
     function DiscordBotInterface() {
       const [guilds, setGuilds] = useState([]);
