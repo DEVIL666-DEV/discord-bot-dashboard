@@ -1,0 +1,235 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Discord Bot Dashboard</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    body { margin: 0; overflow: hidden; }
+    .scrollable { overflow-y: auto; -webkit-overflow-scrolling: touch; }
+  </style>
+</head>
+<body>
+  <div id="app"></div>
+
+  <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+  <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  
+  <script type="text/babel">
+    const { useState, useEffect } = React;
+    
+    // Change this to your bot-hosting.net URL or leave as-is for same-origin
+    const API_URL = window.location.origin + '/api';
+
+    function DiscordBotInterface() {
+      const [guilds, setGuilds] = useState([]);
+      const [selectedGuild, setSelectedGuild] = useState(null);
+      const [selectedChannel, setSelectedChannel] = useState(null);
+      const [messages, setMessages] = useState([]);
+      const [messageInput, setMessageInput] = useState('');
+      const [expandedGuilds, setExpandedGuilds] = useState({});
+      const [loading, setLoading] = useState(true);
+      const [sending, setSending] = useState(false);
+
+      useEffect(() => {
+        loadGuilds();
+      }, []);
+
+      useEffect(() => {
+        if (selectedChannel) {
+          loadMessages(selectedChannel.id);
+        }
+      }, [selectedChannel]);
+
+      const loadGuilds = async () => {
+        try {
+          setLoading(true);
+          const response = await fetch(`${API_URL}/structure`);
+          const data = await response.json();
+          setGuilds(data);
+          
+          if (data.length > 0) {
+            const firstGuild = data[0];
+            setSelectedGuild(firstGuild);
+            setExpandedGuilds({ [firstGuild.id]: true });
+            if (firstGuild.channels.length > 0) {
+              setSelectedChannel(firstGuild.channels[0]);
+            }
+          }
+        } catch (error) {
+          console.error('Failed to load guilds:', error);
+        } finally {
+          setLoading(false);
+        }
+      };
+
+      const loadMessages = async (channelId) => {
+        try {
+          const response = await fetch(`${API_URL}/channels/${channelId}/messages`);
+          const data = await response.json();
+          setMessages(data);
+        } catch (error) {
+          console.error('Failed to load messages:', error);
+          setMessages([]);
+        }
+      };
+
+      const toggleGuild = (guildId) => {
+        setExpandedGuilds(prev => ({
+          ...prev,
+          [guildId]: !prev[guildId]
+        }));
+      };
+
+      const selectChannel = (guild, channel) => {
+        setSelectedGuild(guild);
+        setSelectedChannel(channel);
+      };
+
+      const sendMessage = async () => {
+        if (!messageInput.trim() || !selectedChannel || sending) return;
+
+        try {
+          setSending(true);
+          const response = await fetch(`${API_URL}/channels/${selectedChannel.id}/messages`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ content: messageInput })
+          });
+
+          if (response.ok) {
+            const newMessage = await response.json();
+            setMessages(prev => [...prev, newMessage]);
+            setMessageInput('');
+          }
+        } catch (error) {
+          console.error('Failed to send message:', error);
+        } finally {
+          setSending(false);
+        }
+      };
+
+      const formatTimestamp = (timestamp) => {
+        const date = new Date(timestamp);
+        return date.toLocaleString('en-US', {
+          month: 'short',
+          day: 'numeric',
+          hour: '2-digit',
+          minute: '2-digit'
+        });
+      };
+
+      if (loading) {
+        return (
+          <div className="flex h-screen bg-gray-800 items-center justify-center">
+            <div className="text-gray-400 text-xl">Loading bot data...</div>
+          </div>
+        );
+      }
+
+      return (
+        <div className="flex h-screen bg-gray-800 text-gray-100">
+          {/* Sidebar */}
+          <div className="w-64 bg-gray-900 flex flex-col">
+            <div className="p-4 border-b border-gray-800">
+              <h1 className="text-xl font-bold text-white">Bot Dashboard</h1>
+            </div>
+            
+            <div className="flex-1 scrollable">
+              {guilds.map(guild => (
+                <div key={guild.id} className="mb-2">
+                  <div
+                    className="flex items-center px-3 py-2 hover:bg-gray-800 cursor-pointer"
+                    onClick={() => toggleGuild(guild.id)}
+                  >
+                    <span className="mr-2">{expandedGuilds[guild.id] ? '▼' : '▶'}</span>
+                    <span className="font-semibold">{guild.name}</span>
+                  </div>
+                  
+                  {expandedGuilds[guild.id] && (
+                    <div className="ml-4">
+                      {guild.channels.map(channel => (
+                        <div
+                          key={channel.id}
+                          className={`px-3 py-1.5 cursor-pointer rounded ${
+                            selectedChannel?.id === channel.id
+                              ? 'bg-gray-700 text-white'
+                              : 'text-gray-400 hover:bg-gray-800'
+                          }`}
+                          onClick={() => selectChannel(guild, channel)}
+                        >
+                          # {channel.name}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Main Area */}
+          <div className="flex-1 flex flex-col">
+            {selectedChannel && (
+              <div className="h-12 border-b border-gray-700 flex items-center px-4 bg-gray-800">
+                <span className="font-semibold"># {selectedChannel.name}</span>
+              </div>
+            )}
+
+            <div className="flex-1 scrollable p-4 space-y-4">
+              {messages.map(msg => (
+                <div key={msg.id} className="flex items-start space-x-3">
+                  <div className="w-10 h-10 rounded-full bg-blue-600 flex items-center justify-center text-white font-semibold flex-shrink-0">
+                    {msg.author[0].toUpperCase()}
+                  </div>
+                  <div className="flex-1">
+                    <div className="flex items-baseline space-x-2">
+                      <span className="font-semibold text-white">{msg.author}</span>
+                      {msg.isBot && (
+                        <span className="text-xs bg-blue-600 text-white px-1.5 py-0.5 rounded">
+                          BOT
+                        </span>
+                      )}
+                      <span className="text-xs text-gray-500">
+                        {formatTimestamp(msg.timestamp)}
+                      </span>
+                    </div>
+                    <div className="text-gray-300 mt-1">{msg.content}</div>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {selectedChannel && (
+              <div className="p-4 bg-gray-800">
+                <div className="flex items-center bg-gray-700 rounded-lg px-4 py-2">
+                  <input
+                    type="text"
+                    value={messageInput}
+                    onChange={(e) => setMessageInput(e.target.value)}
+                    onKeyPress={(e) => e.key === 'Enter' && sendMessage()}
+                    placeholder={`Message #${selectedChannel.name}`}
+                    className="flex-1 bg-transparent outline-none text-gray-100 placeholder-gray-500"
+                    disabled={sending}
+                  />
+                  <button
+                    onClick={sendMessage}
+                    disabled={!messageInput.trim() || sending}
+                    className="ml-2 px-4 py-1 bg-blue-600 hover:bg-blue-700 rounded disabled:opacity-50"
+                  >
+                    Send
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      );
+    }
+
+    ReactDOM.render(<DiscordBotInterface />, document.getElementById('app'));
+  </script>
+</body>
+</html>
